@@ -2,11 +2,15 @@
 
 Simple Dispatch method for modeling the U.S. power sector and simulating marginal emissions factors (MEFs)
 
+Download the files from github to run the 2017 FRCC simulation. Running simulations for additional regions will require downloading more CEMS data (see cems/ description below)
+
 last edited: 2018-10-02
 
 #Files included:
 
 #Python files:
+
+cems/ #folder containing CEMS data (one .csv per state per month). Currently, it only has Florida files (enough data to run the 2017 "FRCC" nerc region simulation. Download additional files for other states at: ftp://newftp.epa.gov/DmDnLoad/emissions/hourly/monthly/
 
 simple_dispatch.py #runs the simple_dispatch program
 
@@ -23,8 +27,6 @@ Part 2 Schedule 6 - Balancing Authority Hourly System Lambda.csv #see https://ww
 Respondent IDs.csv #used to cateogorize the respondents from Part 2 Schedule 6 by their appropriate NERC region
 
 fuel_default_prices.xlsx #compiled by author, based on https://www.eia.gov/coal/markets/ , https://www.eia.gov/dnav/ng/hist/rngwhhdm.htm , https://www.eia.gov/dnav/pet/hist/RWTCD.htm , https://www.eia.gov/nuclear/
-
-cems/ #folder containing CEMS data (one .csv per state per month) see ftp://newftp.epa.gov/DmDnLoad/emissions/hourly/monthly/
 
 #Results examples:
 
