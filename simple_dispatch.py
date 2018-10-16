@@ -1,13 +1,11 @@
 # simple_dispatch
 # Thomas Deetjen
-# v_21
-# last edited: 2018-10-02
+# v_22
+# last edited: 2018-10-16
 # class "generatorData" turns CEMS, eGrid, FERC, and EIA data into a cleaned up dataframe for feeding into a "bidStack" object
 # class "bidStack" creates a merit order curve from the generator fleet information created by the "generatorData" class
 # class "dispatch" uses the "bidStack" object to choose which power plants should be operating during each time period to meet a demand time-series input
-# ---
-# v21:
-# set up to simulate the 2017 historical dispatch for the NERC regional level
+
 
 import pandas
 import matplotlib.pylab
@@ -15,6 +13,7 @@ import scipy
 import scipy.interpolate
 import datetime
 import math
+import os
 
 
 
@@ -107,9 +106,9 @@ class generatorData(object):
         states = {'FRCC': ['fl'], 
                   'WECC': ['ca','or','wa','mn','id','wy','ut','co','az','nm','tx'],
                   'SPP' : ['nm','ks','tx','ok','la','ar','mo'],
-                  'RFC' : ['wi','mi','il','in','oh','ky','wv','vi','md','pe','nj'],
+                  'RFC' : ['wi','mi','il','in','oh','ky','wv','va','md','pa','nj'],
                   'NPCC' : ['ny','ct','de','ri','ma','vt','nh','me'],
-                  'SERC' : ['mo','ar','tx','la','ms','tn','ky','il','vi','al','fl','ga','sc','nc'],
+                  'SERC' : ['mo','ar','tx','la','ms','tn','ky','il','va','al','fl','ga','sc','nc'],
                   'MRO': ['ia','il','mi','mn','mo','mt','nd','ne','sd','wi','wy'], 
                   'TRE': ['ok','tx']}
         #compile the different months of CEMS files into one dataframe, df_cems. (CEMS data is downloaded by state and by month, so compiling a year of data for ERCOT / TRE, for example, requires reading in 12 Texas .csv files and 12 Oklahoma .csv files)   
@@ -199,6 +198,8 @@ class generatorData(object):
         #if we are using, for example, 2017 CEMS and 2016 eGrid, there may be some powerplants without fuel, fuel_type, and prime_mover data. Lets assums 'ng', 'gas', and 'ct' for these units based on trends on what was built in 2017
         df_orispl_unit.loc[df_orispl_unit.fuel.isna(), ['fuel', 'fuel_type']] = ['ng', 'gas']
         df_orispl_unit.loc[df_orispl_unit.prime_mover.isna(), 'prime_mover'] = 'ct'
+        #also change 'og' to fuel_type 'gas' instead of 'ofsl' (other fossil fuel)
+        df_orispl_unit.loc[df_orispl_unit.fuel=='og', ['fuel', 'fuel_type']] = ['og', 'gas']
         df_orispl_unit.fillna(0.0, inplace=True)
         #add in some columns to aid in calculating the fuel mix
         for f_type in ['gas', 'coal', 'oil', 'nuclear', 'hydro', 'geothermal', 'biomass']:
@@ -467,7 +468,7 @@ class generatorData(object):
 
 
 class bidStack(object):
-    def __init__(self, gen_data_obj, time=1, dropNucHydroGeo=False, include_min_output=True):
+    def __init__(self, gen_data_obj, co2_dol_per_kg=0.0, so2_dol_per_kg=0.0, nox_dol_per_kg=0.0, time=1, dropNucHydroGeo=False, include_min_output=True):
         """ 
         1) Bring in the generator data created by the "generatorData" class.
         2) Calculate the generation cost for each generator and sort the generators by generation cost. Default emissions prices [$/kg] are 0.00 for all emissions.
@@ -479,6 +480,9 @@ class bidStack(object):
         """
         self.df_0 = gen_data_obj.df
         self.df = self.df_0.copy(deep=True)
+        self.co2_dol_per_kg = co2_dol_per_kg
+        self.so2_dol_per_kg = so2_dol_per_kg
+        self.nox_dol_per_kg = nox_dol_per_kg
         self.year = gen_data_obj.year
         self.time = time
         self.include_min_output = include_min_output
@@ -494,7 +498,14 @@ class bidStack(object):
         ---
         """
         self.df = self.df[(self.df.fuel!='nuc') & (self.df.fuel!='wat') & (self.df.fuel!='geo')]
-     
+
+    def updateEmissionsPrices(self, co2_price_new, so2_price_new, nox_price_new):
+        """ Updates self. emissions prices (in $/kg)
+        ---
+        """
+        self.co2_dol_per_kg = co2_price_new
+        self.so2_dol_per_kg = so2_price_new
+        self.nox_dol_per_kg = nox_price_new   
     
     def updateTime(self, t_new):
         """ Updates self.time
@@ -505,24 +516,20 @@ class bidStack(object):
         self.calcFullMeritOrder()
         
                 
-    def calcGenCost(self, co2_price=0.0, so2_price=0.0, nox_price=0.0):
+    def calcGenCost(self):
         """ Calculate average costs that are function of generator data, fuel cost, and emissions prices.
         gen_cost ($/MWh) = (heat_rate * "fuel"_price) + (co2 * co2_price) + (so2 * so2_price) + (nox * nox_price) + vom 
-        ---
-        co2_price : [$/kg]
-        so2_price : [$/kg]
-        nox_price : [$/kg]
         """
         df = self.df.copy(deep=True)
         df['fuel_cost'] = df['heat_rate' + str(self.time)] * df['fuel_price' + str(self.time)] 
-        df['co2_cost'] = df['co2' + str(self.time)] * co2_price 
-        df['so2_cost'] = df['so2' + str(self.time)] * so2_price 
-        df['nox_cost'] = df['nox' + str(self.time)] * nox_price 
+        df['co2_cost'] = df['co2' + str(self.time)] * self.co2_dol_per_kg 
+        df['so2_cost'] = df['so2' + str(self.time)] * self.so2_dol_per_kg 
+        df['nox_cost'] = df['nox' + str(self.time)] * self.nox_dol_per_kg 
         df['gen_cost'] = df.fuel_cost + df.co2_cost + df.so2_cost + df.nox_cost + df.vom
         df = df.append(df.loc[0]*0) #add a zero generator so that the bid stack goes all the way down to zero. This is important for calculting information for the marginal generator when the marginal generator is the first one in the bid stack.
         df.sort_values('gen_cost', inplace=True)
         df.reset_index(drop=True, inplace=True)
-        df['demand'] = df.mw.cumsum()	
+        df['demand'] = df['mw' + str(self.time)].cumsum()	
         df['f'] = df['demand']
         df['s'] = scipy.append(0, scipy.array(df.f[0:-1]))
         df['a'] = scipy.maximum(df.s - df.min_out*(1/0.10), 1.0)       
@@ -586,34 +593,42 @@ class bidStack(object):
         """
         ind = self.df.index[self.df.demand <= demand][-1]
         tmp = self.df.iloc[0:ind+1,]
-        return sum(tmp[is_fuel_type] * tmp['mw' + str(self.time)]) + self.df.loc[ind+1, is_fuel_type] * (demand - self.df.loc[ind+1, 's'])
+        #return sum( tmp[is_fuel_type] * tmp['mw' + str(self.time)]) + self.df.loc[ind, is_fuel_type] * (demand - self.df.loc[ind, 's'])
+        return sum( tmp[is_fuel_type] * tmp['mw' + str(self.time)]) + self.returnMarginalGenerator(demand, is_fuel_type) * (demand - self.df.iloc[ind].demand)
        
         
     def calcFullMeritOrder(self):
-        """ Calculates the base_ and marg_ co2, so2, nox, and coal_mix, where "base_" represents the online "base load" that does not change with marginal changes in demand and "marg_" represents the marginal portion of the merit order that does change with marginal changes in demand. The calculation of base_ and marg_ changes depending on whether the minimum output constraint (the include_min_output variable) is being used.
+        """ Calculates the base_ and marg_ co2, so2, nox, and coal_mix, where "base_" represents the online "base load" that does not change with marginal changes in demand and "marg_" represents the marginal portion of the merit order that does change with marginal changes in demand. The calculation of base_ and marg_ changes depending on whether the minimum output constraint (the include_min_output variable) is being used. In general, "base" is a value (e.g. 'full_gen_cost_tot_base' has units [$], and 'full_co2_base' has units [kg]) while "marg" is a rate (e.g. 'full_gen_cost_tot_marg' has units [$/MWh], and 'full_co2_marg' has units [kg/MWh]). When the dispatch object solves the dispatch, it calculates the total emissions for one time period as 'full_co2_base' + 'full_co2_marg' * (marginal generation MWh) to end up with units of [kg].
         ---
         """
         df = self.df.copy(deep=True)
         #INCLUDING MIN OUTPUT
         if self.include_min_output:
+            #total production cost
+            df['full_gen_cost_tot_base'] = 0.1*df.a.apply(self.returnTotalCost) + 0.9*df.s.apply(self.returnTotalCost) + df.s.apply(self.returnMarginalGenerator, args=('gen_cost',)) * df.s.apply(self.returnMarginalGenerator, args=('min_out',)) #calculate the base production cost [$]
+            df['full_gen_cost_tot_marg'] = ((df.s.apply(self.returnTotalCost) - df.a.apply(self.returnTotalCost)) / (df.s-df.a) * (df.min_out/(df.f-df.s)) + df.s.apply(self.returnMarginalGenerator, args=('gen_cost',)) * (1 -(df.min_out/(df.f-df.s)))).fillna(0.0) #calculate the marginal base production cost [$/MWh]
             #emissions
             for e in ['co2', 'so2', 'nox']:
-                df['full_' + e + '_base'] = 0.1*df.a.apply(self.returnTotalEmissions, args=(e,)) + 0.9*df.s.apply(self.returnTotalEmissions, args=(e,)) + df.s.apply(self.returnMarginalGenerator, args=(e,)) * df.s.apply(self.returnMarginalGenerator, args=('min_out',)) #calculate the base emissions 
-                df['full_' + e + '_marg'] = ((df.s.apply(self.returnTotalEmissions, args=(e,)) - df.a.apply(self.returnTotalEmissions, args=(e,))) / (df.s-df.a) * (df.min_out/(df.f-df.s)) + df.s.apply(self.returnMarginalGenerator, args=(e,)) * (1 -(df.min_out/(df.f-df.s)))).fillna(0.0) #calculate the marginal emissions
+                df['full_' + e + '_base'] = 0.1*df.a.apply(self.returnTotalEmissions, args=(e,)) + 0.9*df.s.apply(self.returnTotalEmissions, args=(e,)) + df.s.apply(self.returnMarginalGenerator, args=(e,)) * df.s.apply(self.returnMarginalGenerator, args=('min_out',)) #calculate the base emissions [kg]
+                df['full_' + e + '_marg'] = ((df.s.apply(self.returnTotalEmissions, args=(e,)) - df.a.apply(self.returnTotalEmissions, args=(e,))) / (df.s-df.a) * (df.min_out/(df.f-df.s)) + df.s.apply(self.returnMarginalGenerator, args=(e,)) * (1 -(df.min_out/(df.f-df.s)))).fillna(0.0) #calculate the marginal emissions [kg/MWh]
             #fuel mix
-            for f in ['gas', 'coal', 'oil', 'nuclear', 'hydro', 'geothermal', 'biomass']:
-                df['full_' + f + '_mix_base'] = 0.1*df.a.apply(self.returnTotalFuelMix, args=(('is_'+f),)) + 0.9*df.s.apply(self.returnTotalFuelMix, args=(('is_'+f),)) + self.df['is_'+f] * df.s.apply(self.returnMarginalGenerator, args=('min_out',)) #calculate the base coal_mix
-                df['full_' + f + '_mix_marg'] = ((df.s.apply(self.returnTotalFuelMix, args=(('is_'+f),)) - df.a.apply(self.returnTotalFuelMix, args=(('is_'+f),))) / (df.s-df.a) * (df.min_out/(df.f-df.s)) + df.s.apply(self.returnMarginalGenerator, args=(('is_'+f),)) * (1 -(df.min_out/(df.f-df.s)))).fillna(0.0) #calculate the marginal coal_mix   
+            for fl in ['gas', 'coal', 'oil', 'nuclear', 'hydro', 'geothermal', 'biomass']:
+            #for fl in ['gas', 'coal']:
+                df['full_' + fl + '_mix_base'] = 0.1*df.a.apply(self.returnTotalFuelMix, args=(('is_'+fl),)) + 0.9*df.s.apply(self.returnTotalFuelMix, args=(('is_'+fl),)) + self.df['is_'+fl] * df.s.apply(self.returnMarginalGenerator, args=('min_out',)) #calculate the base coal_mix [MWh]
+                df['full_' + fl + '_mix_marg'] = ((df.s.apply(self.returnTotalFuelMix, args=(('is_'+fl),)) - df.a.apply(self.returnTotalFuelMix, args=(('is_'+fl),))) / (df.s-df.a) * (df.min_out/(df.f-df.s)) + df.s.apply(self.returnMarginalGenerator, args=(('is_'+fl),)) * (1 -(df.min_out/(df.f-df.s)))).fillna(0.0) #calculate the marginal coal_min [fraction of marginal MWh]
         #EXCLUDING MIN OUTPUT
         if not self.include_min_output:
+            #total production cost
+            df['full_gen_cost_tot_base'] = df.s.apply(self.returnTotalCost) #calculate the base production cost, which is now the full load production cost of the generators in the merit order below the marginal unit [$]
+            df['full_gen_cost_tot_marg'] = df.s.apply(self.returnMarginalGenerator, args=('gen_cost',)) #calculate the marginal production cost, which is now just the generation cost of the marginal generator [$/MWh]
             #emissions
             for e in ['co2', 'so2', 'nox']:
-                df['full_' + e + '_base'] = df.s.apply(self.returnTotalEmissions, args=(e,)) #calculate the base emissions, which is now the full load emissions of the generators in the merit order below the marginal unit
-                df['full_' + e + '_marg'] = df.s.apply(self.returnMarginalGenerator, args=(e,)) #calculate the marginal emissions, which is now just the emissions rate of the marginal generator
+                df['full_' + e + '_base'] = df.s.apply(self.returnTotalEmissions, args=(e,)) #calculate the base emissions, which is now the full load emissions of the generators in the merit order below the marginal unit [kg]
+                df['full_' + e + '_marg'] = df.s.apply(self.returnMarginalGenerator, args=(e,)) #calculate the marginal emissions, which is now just the emissions rate of the marginal generator [kg/MWh]
             #fuel mix
-            for f in ['gas', 'coal', 'oil', 'nuclear', 'hydro', 'geothermal', 'biomass']:
-                df['full_' + f + '_mix_base'] = df.s.apply(self.returnTotalFuelMix, args=(('is_'+f),)) #calculate the base fuel_mix, which is now the full load coal mix of the generators in the merit order below the marginal unit
-                df['full_' + f + '_mix_marg'] = df.s.apply(self.returnMarginalGenerator, args=(('is_'+f),)) #calculate the marginal fuel_mix, which is now just the fuel_type of the marginal generator
+            for fl in ['gas', 'coal', 'oil', 'nuclear', 'hydro', 'geothermal', 'biomass']:
+                df['full_' + fl + '_mix_base'] = df.s.apply(self.returnTotalFuelMix, args=(('is_'+fl),)) #calculate the base fuel_mix, which is now the full load coal mix of the generators in the merit order below the marginal unit [MWh]
+                df['full_' + fl + '_mix_marg'] = df.s.apply(self.returnMarginalGenerator, args=(('is_'+fl),)) #calculate the marginal fuel_mix, which is now just the fuel_type of the marginal generator [fraction of marginal MWh]
         #update the master dataframe df
         self.df = df
         
@@ -736,7 +751,7 @@ class dispatch(object):
         df_slice = self.df[(self.df.datetime >= pandas._libs.tslib.Timestamp(start_date)) & (self.df.datetime < pandas._libs.tslib.Timestamp(end_date))].copy(deep=True)
         #calculate the dispatch for the slice by applying the return###### functions of the bstack object
         df_slice['gen_cost_marg'] = df_slice.demand.apply(bstack.returnMarginalGenerator, args=('gen_cost',)) #generation cost of the marginal generator
-        df_slice['gen_cost_tot'] = df_slice.demand.apply(bstack.returnTotalCost) #generation cost of the total generation fleet
+        df_slice['gen_cost_tot'] = df_slice.demand.apply(bstack.returnFullTotalValue, args=('gen_cost_tot',)) #generation cost of the total generation fleet
         for e in ['co2', 'so2', 'nox']:
             df_slice[e + '_marg'] = df_slice.demand.apply(bstack.returnFullMarginalValue, args=(e,)) #emissions rate (kg/MWh) of marginal generators
             df_slice[e + '_tot'] = df_slice.demand.apply(bstack.returnFullTotalValue, args=(e,)) #total emissions (kg) of online generators
@@ -776,32 +791,35 @@ class dispatch(object):
 if __name__ == '__main__':
     
     #input variables. Right now the github only has 2017 data on it.
+    data_folder = os.getcwd() #where the input data files are located
+    historical_dispatch_save_folder = os.getcwd() #where to save the historical dispatch results
+    simulated_dispatch_save_folder = os.getcwd() #where to save the simulated dispatch results
     run_year = 2017
-    nerc_region = 'FRCC'
-    historical_dispatch_save_folder = 'C:\\Users\\tdeet\\Documents\\data\\processed\\epa\\CEMS' #where to save the historical dispatch results
-    simulated_dispatch_save_folder = 'C:\\Users\\tdeet\\Documents\\analysis\\modules\\python\\simple_dispatch' #where to save the simulated dispatch results
-    #specific the location of the data directories
-    #2017: (Note: uses 2017 CEMS with 2016 eGRID)
-    egrid_data_xlsx = 'C:\\Users\\tdeet\\Documents\\data\\raw\\eGRID\\egrid2016_data.xlsx'
-    eia923_schedule5_xlsx = 'C:\\Users\\tdeet\\Documents\\data\\raw\\eia\\eia9232017\\EIA923_Schedules_2_3_4_5_M_12_2017_Early_Release.xlsx'
-    ferc714_part2_schedule6_csv = 'C:\\Users\\tdeet\\Documents\\data\\raw\\ferc\\ferc_714\\Part 2 Schedule 6 - Balancing Authority Hourly System Lambda.csv'
-    ferc714IDs_csv='C:\\Users\\tdeet\\Documents\\data\\raw\\ferc\\ferc_714\\Respondent IDs.csv'
-    cems_folder_path ='C:\\Users\\tdeet\\Documents\\data\\raw\\epa\\CEMS'
-    fuel_commodity_prices_xlsx = 'C:\\Users\\tdeet\\Documents\\data\\processed\\eiaFuelPrices\\fuel_default_prices.xlsx'
-    
-    #run the generator data object
-    gd = generatorData(nerc_region, egrid_fname=egrid_data_xlsx, eia923_fname=eia923_schedule5_xlsx, ferc714IDs_fname=ferc714IDs_csv, ferc714_fname=ferc714_part2_schedule6_csv, cems_folder=cems_folder_path, year=run_year, fuel_commodity_prices_excel_dir=fuel_commodity_prices_xlsx) 
-    #save the historical dispatch  
-    gd.hist_dispatch.to_csv(historical_dispatch_save_folder + '\\%s_%s_hourly_demand_and_fuelmix.csv'%(str(run_year), nerc_region))
-            
-    #run the bidStack object - use information about the generators (from gd) to create a merit order (bid stack) of the nerc region's generators
-    bs = bidStack( gd, time=1, dropNucHydroGeo=True, include_min_output=True) #NOTE: set dropNucHydroGeo to True if working with data that only looks at fossil fuels (e.g. CEMS)
-    #bid_stack_cost = bs.plotBidStack('gen_cost', plot_type='bar') #plot the merit order
-    #bid_stack_cost.savefig('C:\\Users\\tdeet\\Documents\\media\\publications\\2018-03 MEFS Simple Dispatch\\LaTeX\\images_raw\\fStackCost%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+    for nr in ['FRCC']: #add nerc regions to list to loop through (e.g. 'SERC', 'TRE', etc.)
+        nerc_region = nr
+        #specific the location of the data directories
+        #2017: (Note: uses 2017 CEMS with 2016 eGRID)
+        egrid_data_xlsx = data_folder + '\\egrid2016_data.xlsx'
+        eia923_schedule5_xlsx = data_folder + '\\EIA923_Schedules_2_3_4_5_M_12_2017_Early_Release.xlsx'
+        ferc714_part2_schedule6_csv = data_folder + '\\Part 2 Schedule 6 - Balancing Authority Hourly System Lambda.csv'
+        ferc714IDs_csv = data_folder + '\\Respondent IDs.csv'
+        cems_folder_path = data_folder
+        fuel_commodity_prices_xlsx = data_folder + '\\fuel_default_prices.xlsx'
         
-    #run the dispatch object - use the nerc region's merit order (bs), a demand timeseries (gd.demand_data), and a time array (default is array([ 1,  2, ... , 51, 52]) for 52 weeks to run a whole year)
-    dp = dispatch(bs, gd.demand_data, time_array=scipy.arange(52)+1) #set up the object
-    dp.calcDispatchAll() #function that solves the dispatch for each time period in time_array (default for each week of the year)
-    #save dispatch results 
-    dp.df.to_csv(simulated_dispatch_save_folder = '\\dispatch_output_weekly_%s_%s.csv'%(nerc_region, str(run_year)), index=False )
+        #run the generator data object
+        gd = generatorData(nerc_region, egrid_fname=egrid_data_xlsx, eia923_fname=eia923_schedule5_xlsx, ferc714IDs_fname=ferc714IDs_csv, ferc714_fname=ferc714_part2_schedule6_csv, cems_folder=cems_folder_path, year=run_year, fuel_commodity_prices_excel_dir=fuel_commodity_prices_xlsx) 
+        #save the historical dispatch  
+        #gd.hist_dispatch.to_csv(historical_dispatch_save_folder + '\\%s_%s_hourly_demand_and_fuelmix.csv'%(str(run_year), nerc_region))
         
+        for co2_dol_per_ton in [0]: #add co2 prices to list to loop through (e.g. 10, 100, in $/ton)
+            #run the bidStack object - use information about the generators (from gd) to create a merit order (bid stack) of the nerc region's generators
+            bs = bidStack( gd, co2_dol_per_kg=(co2_dol_per_ton / 907.185), time=1, dropNucHydroGeo=True, include_min_output=True) #NOTE: set dropNucHydroGeo to True if working with data that only looks at fossil fuels (e.g. CEMS)
+            bid_stack_cost = bs.plotBidStack('gen_cost', plot_type='bar') #plot the merit order
+            bid_stack_cost.savefig(simulated_dispatch_save_folder + '\\fStackCost%s_%s_%sco2.png'%(nerc_region, str(run_year), str(co2_dol_per_ton)), dpi=500, bbox_inches='tight')
+                          
+            #run the dispatch object - use the nerc region's merit order (bs), a demand timeseries (gd.demand_data), and a time array (default is array([ 1,  2, ... , 51, 52]) for 52 weeks to run a whole year)
+            dp = dispatch(bs, gd.demand_data, time_array=scipy.arange(52)+1) #set up the object
+            dp.calcDispatchAll() #function that solves the dispatch for each time period in time_array (default for each week of the year)
+            #save dispatch results 
+            dp.df.to_csv(simulated_dispatch_save_folder + '\\dispatch_output_weekly_%s_%s_%sco2.csv'%(nerc_region, str(run_year), str(co2_dol_per_ton)), index=False )
+

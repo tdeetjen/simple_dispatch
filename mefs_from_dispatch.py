@@ -1,14 +1,9 @@
 # mefs_from_dispatch
 # Thomas Deetjen
-# v_13
-# last edited: 2018-10-02
-# class "generateMefs" calculates the marginal emissions factors and fuel mix for a dispatch object (from simple_dispatch.py module)
-# class "plotDispatch" takes the historical dispatch and the simulated dispatch and provides a number of functions for plotting them for comparison
-# class "plotDispatchMultiple" takes in multiple historical and simulated dispatch objects and provides functions for plotting them for comparison
-#---
-# v_13:
-# designed to work with the output from simple_dispatch v_21
-# used to compare the 2017 historical and simulated dispatches for the MRO, TRE, FRCC, and WECC regions in NERC
+# v12
+# last edited: 2018-10-16
+# class "generate_mefs" creates a dataframe and plot of the MEFs for a given dispatch csv
+
 
 import pandas
 import matplotlib.pylab
@@ -16,6 +11,7 @@ import scipy
 import scipy.linalg
 import scipy.stats
 import math
+import os
 
 
 
@@ -24,7 +20,7 @@ import math
 class generateMefs(object):
     def __init__(self, dispatch_df):
         """ 
-        Uses a dispatch data frame to calculate the marginal emissions factors and fuel mix per hour (or per timestep), where marginal emissions factors for each hour equals the change in generation divided by the change in emissions versus the previou hour.
+        Uses a dispatch data frame to calculate the marginal emissions factors and fuel mix per hour (or per timestep)
         ---
         dispatch_df : a data frame of the dispatch (historical or simulated). From the simple_dispatch module, can use generatorData.hist_dispatch or dispatch.df data frames for the dispatch_df argument here
         """
@@ -85,7 +81,7 @@ class plotDispatch(object):
         ---
         dispatch_df : the dataframe version of a csv file containing the dispatch output of the simple_dispatch.dispatch
         cems_df : the CEMS '2014_%s_hourly_demand_and_fuelmix.csv'%s(nerc_region) csv file showing fuel_mix in the cems data
-        deciles_cedm & mefs_cedm_### : data from the CEDM website ( https://cedm.shinyapps.io/MarginalFactors/ ) showing what the regressions-based historically-derived MEFs are. The default gives an example of 2014 TRE MEFs.
+        deciles : the demand points that we want to calculate seperate MEFs for [MW]
         """
         self.df = dispatch_df.copy(deep=True)
         self.cems_df = cems_df
@@ -566,6 +562,15 @@ class plotDispatchMultiple(object):
                 #set xlim for error plots
                 if series == 'error':
                     ax.set_xlim(error_range[0]*xmult, error_range[1]*xmult)
+# =============================================================================
+#                     if x_property[4:]=='marg':
+#                         if x_property[:3]!='co2':
+#                             matplotlib.pylab.text(0.025, 0.73, 'Error [kg/MWh]:\n5$^{th}$ Pctl.    %.2f\nMedian      %.2f\n95$^{th}$ Pctl.   %.2f'%(errs[n].quantile(0.05)*xmult, errs[n].median()*xmult,  errs[n].quantile(0.95)*xmult), transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.5))
+#                         else:
+#                             matplotlib.pylab.text(0.025, 0.73, 'Error [kg/MWh]:\n5$^{th}$ Pctl.    %.0f\nMedian      %.0f\n95$^{th}$ Pctl.   %.0f'%(errs[n].quantile(0.05)*xmult, errs[n].median()*xmult,  errs[n].quantile(0.95)*xmult), transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.5))
+#                     else:
+#                         matplotlib.pylab.text(0.025, 0.73, 'Relative Error [%]' + '\n5$^{th}$ Pctl.    %.0f\nMedian      %.0f\n95$^{th}$ Pctl.   %.0f'%(errs[n].quantile(0.05)*xmult, errs[n].median()*xmult,  errs[n].quantile(0.95)*xmult), transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.5))
+# =============================================================================
             #return
             matplotlib.pylab.tight_layout()
             return f
@@ -577,20 +582,19 @@ class plotDispatchMultiple(object):
 if __name__ == '__main__':
     
     run_year = 2017
-    historical_dispatch_save_folder = 'C:\\Users\\tdeet\\Documents\\data\\processed\\epa\\CEMS'
-    simulated_dispatch_save_folder = 'C:\\Users\\tdeet\\Documents\\analysis\\modules\\python\\simple_dispatch'
-    figure_save_location = 'C:\\Users\\tdeet\\Documents\\media\\publications\\2018-03 MEFS Simple Dispatch\\LaTeX\\images_raw'
-    for nr in ['TRE', 'MRO', 'FRCC', 'WECC']:
+    co2_dol_per_ton = 0 #specify co2 price in $/ton that corresponds to an existing dispatch solution produced by simple_dispatch.py. This is used for naming conventions to access the correct dispatch solution .csv file
+    input_file_directory = os.getcwd()
+    output_file_directory = os.getcwd()
+    for nr in ['FRCC']:
         nerc_region = nr
-        #read in the simulated dispatch solution
-        dispatch_solution = pandas.read_csv(simulated_dispatch_save_folder + '\\dispatch_output_weekly_%s_%s.csv'%(nerc_region, str(run_year)))
-        #read in the historical CEMS dispatch data
-        dispatch_CEMS = pandas.read_csv(historical_dispatch_save_folder + '\\%s_%s_hourly_demand_and_fuelmix.csv'%(str(run_year), nerc_region),index_col='Unnamed: 0')
+        #dispatch solution
+        dispatch_solution = pandas.read_csv(input_file_directory + '\\dispatch_output_weekly_%s_%s_%sco2.csv'%(nerc_region, str(run_year), str(co2_dol_per_ton)))
+        #historical CEMS dispatch data
+        dispatch_CEMS = pandas.read_csv(input_file_directory + '\\%s_%s_hourly_demand_and_fuelmix.csv'%(str(run_year), nerc_region),index_col='Unnamed: 0')
         dispatch_CEMS.datetime = pandas.to_datetime(dispatch_CEMS.datetime) #put the datetime column into the correct type
         dispatch_CEMS.gen_cost_marg = scipy.minimum(150, dispatch_CEMS.gen_cost_marg) #remove prices larger than 150 $/MWh. Consider these outliers. For example, with 2014 TRE, R-squared between the actual data and simulated data is 0.16 while R-squared after capping the historical data at 150 $/MWh is 0.53. 150 $/MWh is something above the 99th percentile in most cases, so we are now saying that the simulation has a fit of 0.53 for 99+% of the historical data.
-        #generate marginal emissions factors and fuel mix for the historical CEMS dispatch 
         gm_cems = generateMefs(dispatch_CEMS) 
-        dispatch_CEMS = gm_cems.df.copy(deep=True)
+        dispatch_CEMS = gm_cems.df.copy(deep=True) #the script now calcultes hourly MEFs, which we want for some plotting below
         #data below from CEDM at https://cedm.shinyapps.io/MarginalFactors/
         if run_year == 2014:
             if nerc_region == 'TRE':
@@ -631,16 +635,11 @@ if __name__ == '__main__':
                 mefs_cedm_nox = [0.44,0.40,0.36,0.39,0.37,0.38,0.37,0.34,0.32,0.26]
         #create the plotDispatch object
         pd = plotDispatch(dispatch_solution, dispatch_CEMS, deciles, mefs_cedm_co2, mefs_cedm_so2, mefs_cedm_nox)
-        pd.rolling_calculations(p=500) #perform the rolling averages calculation
-        
-        
-        #start making a bunch of plots
-        
+        pd.rolling_calculations(p=500)
         #fuel betas plot
         fuel_betas_plot = pd.plot_x_demand()
         #save
-        fuel_betas_plot.savefig(figure_save_location + '\\fDecilesFuelBeta%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-        
+        fuel_betas_plot.savefig(output_file_directory + '\\fDecilesFuelBeta%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
         #rolling averages plots
         ra_start = '2017-01-01 00:00:00'
         ra_end = '2018-01-01 00:00:00'
@@ -648,13 +647,11 @@ if __name__ == '__main__':
         co2_year = pd.plot_hist_vs_simulated(x_property='demand_smooth', y_property='co2_tot', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
         so2_year = pd.plot_hist_vs_simulated(x_property='demand_smooth', y_property='so2_tot', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
         nox_year = pd.plot_hist_vs_simulated(x_property='demand_smooth', y_property='nox_tot', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
-# =============================================================================
-#         #save
-#         prices_year.savefig(figure_save_location + '\\fPricesYear%s_%s.png'%(nerc_region, str(run_year)), dpi=500)
-#         co2_year.savefig(figure_save_location + '\\fCo2Year%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#         so2_year.savefig(figure_save_location + '\\fSo2Year%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#         nox_year.savefig(figure_save_location + '\\fNoxYear%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-# =============================================================================
+        #save
+        prices_year.savefig(output_file_directory + '\\fPricesYear%s_%s.png'%(nerc_region, str(run_year)), dpi=500)
+        co2_year.savefig(output_file_directory + '\\fCo2Year%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+        so2_year.savefig(output_file_directory + '\\fSo2Year%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+        nox_year.savefig(output_file_directory + '\\fNoxYear%s_%s.png'%(nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
         #hourly
         #ra_start = '2014-08-01 00:00:00'
         #ra_end = '2014-08-08 00:00:00'
@@ -662,20 +659,19 @@ if __name__ == '__main__':
         #co2_year = pd.plot_hist_vs_simulated(x_property='hour', y_property='co2_marg', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
         #so2_year = pd.plot_hist_vs_simulated(x_property='hour', y_property='so2_marg', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
         #nox_year = pd.plot_hist_vs_simulated(x_property='hour', y_property='nox_marg', demand_smooth_step=500, start_date=ra_start, end_date=ra_end)
-        
         #density function plots
         #price and emissions
-        for s in ['WholeYear']: #note, could also do:{ for s in ['WholeYear', 'Summer', 'Spring']: } or other variations to look into individual seasons. 
+        for s in ['WholeYear']: #can plot subsets of the annual data covering only part of the time series
             #set dates
             if s == 'WholeYear':
                 df_start = '2017-01-01 00:00:00'
                 df_end = '2018-01-01 00:00:00'
-            if s == 'Spring':
-                df_start = '2017-03-01 00:00:00'
-                df_end = '2017-06-01 00:00:00'
             if s == 'Summer':
-                df_start = '2017-06-01 00:00:00'
-                df_end = '2017-09-01 00:00:00'
+                df_start = '2014-03-01 00:00:00'
+                df_end = '2014-06-01 00:00:00'
+            if s == 'Spring':
+                df_start = '2014-06-01 00:00:00'
+                df_end = '2014-09-01 00:00:00'
             #run plot and save scripts
             price_df = pd.plot_density_function('cumulative', 'data', 'gen_cost_marg', start_date=df_start, end_date=df_end, x_range=[0,100])
             price_df_err = pd.plot_density_function('probability', 'error', 'gen_cost_marg', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
@@ -685,18 +681,15 @@ if __name__ == '__main__':
             so2_df_err = pd.plot_density_function('probability', 'error', 'so2_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
             nox_df = pd.plot_density_function('cumulative', 'data', 'nox_tot', start_date=df_start, end_date=df_end)
             nox_df_err = pd.plot_density_function('probability', 'error', 'nox_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1]) 
-# =============================================================================
-#             #save       
-#             price_df.savefig(figure_save_location + '\\density_plots\\fDf%sPrice%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             price_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sPrice%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             co2_df.savefig(figure_save_location + '\\density_plots\\fDf%sCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             co2_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             so2_df.savefig(figure_save_location + '\\density_plots\\fDf%sSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             so2_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             nox_df.savefig(figure_save_location + '\\density_plots\\fDf%sNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             nox_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-# =============================================================================
-            
+            #save       
+            price_df.savefig(output_file_directory + '\\fDf%sPrice%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            price_df_err.savefig(output_file_directory + '\\fErrorDf%sPrice%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            co2_df.savefig(output_file_directory + '\\fDf%sCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            co2_df_err.savefig(output_file_directory + '\\fErrorDf%sCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            so2_df.savefig(output_file_directory + '\\fDf%sSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            so2_df_err.savefig(output_file_directory + '\\fErrorDf%sSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            nox_df.savefig(output_file_directory + '\\fDf%sNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            nox_df_err.savefig(output_file_directory + '\\fErrorDf%sNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
             #mefs
             co2_mefs_df = pd.plot_density_function('cumulative', 'data', 'co2_marg', start_date=df_start, end_date=df_end, x_range=[0,1500])
             co2_mefs_df_err = pd.plot_density_function('probability', 'error', 'co2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,1500/0.454], error_range=[-1000,1000])
@@ -704,60 +697,48 @@ if __name__ == '__main__':
             so2_mefs_df_err = pd.plot_density_function('probability', 'error', 'so2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,3/0.454], error_range=[-4,4])
             nox_mefs_df = pd.plot_density_function('cumulative', 'data', 'nox_marg', start_date=df_start, end_date=df_end, x_range=[0,2/0.454])
             nox_mefs_df_err = pd.plot_density_function('probability', 'error', 'nox_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,2/0.454], error_range=[-3,3])
+            #save
+            co2_mefs_df.savefig(output_file_directory + '\\fDf%sMefCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            co2_mefs_df_err.savefig(output_file_directory + '\\fErrorDf%sMefCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            so2_mefs_df.savefig(output_file_directory + '\\fDf%sMefSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            so2_mefs_df_err.savefig(output_file_directory + '\\fErrorDf%sMefSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            nox_mefs_df.savefig(output_file_directory + '\\fDf%sMefNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            nox_mefs_df_err.savefig(output_file_directory + '\\fErrorDf%sMefNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+            
 # =============================================================================
+#             #all four regions together
+#             pdmult = plotDispatchMultiple([pd_MRO, pd_TRE, pd_FRCC, pd_WECC])
+#             price_df_mult = pdmult.plot_density_function('cumulative', 'data', 'gen_cost_marg', start_date=df_start, end_date=df_end, x_range=[0,60])
+#             price_df_err_mult = pdmult.plot_density_function('probability', 'error', 'gen_cost_marg', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
+#             co2_df_mult = pdmult.plot_density_function('cumulative', 'data', 'co2_tot', start_date=df_start, end_date=df_end)
+#             co2_df_err_mult = pdmult.plot_density_function('probability', 'error', 'co2_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
+#             so2_df_mult = pdmult.plot_density_function('cumulative', 'data', 'so2_tot', start_date=df_start, end_date=df_end, bin_no=50, x_range=[-scipy.inf, scipy.inf])
+#             so2_df_err_mult = pdmult.plot_density_function('probability', 'error', 'so2_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
+#             nox_df_mult = pdmult.plot_density_function('cumulative', 'data', 'nox_tot', start_date=df_start, end_date=df_end)
+#             nox_df_err_mult = pdmult.plot_density_function('probability', 'error', 'nox_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1]) 
+#             #mefs
+#             co2_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'co2_marg', start_date=df_start, end_date=df_end, x_range=[0,1100])
+#             co2_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'co2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,2000], error_range=[-1100,1100])
+#             so2_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'so2_marg', start_date=df_start, end_date=df_end, x_range=[0,4])
+#             so2_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'so2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,6], error_range=[-4,4])
+#             nox_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'nox_marg', start_date=df_start, end_date=df_end, x_range=[0,2])
+#             nox_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'nox_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,3], error_range=[-2,2])
 #             #save
-#             co2_mefs_df.savefig(figure_save_location + '\\density_plots\\fDf%sMefCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             co2_mefs_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sMefCo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             so2_mefs_df.savefig(figure_save_location + '\\fDf%sMefSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             so2_mefs_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sMefSo2%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             nox_mefs_df.savefig(figure_save_location + '\\density_plots\\fDf%sMefNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
-#             nox_mefs_df_err.savefig(figure_save_location + '\\density_plots\\fErrorDf%sMefNox%s_%s.png'%(s,nerc_region, str(run_year)), dpi=500, bbox_inches='tight')
+#             price_df_mult.savefig(output_file_directory + '\\fDfPriceMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             price_df_err_mult.savefig(output_file_directory + '\\fErrorDfPriceMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             co2_df_mult.savefig(output_file_directory + '\\fDfCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             co2_df_err_mult.savefig(output_file_directory + '\\fErrorDfCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             so2_df_mult.savefig(output_file_directory + '\\fDfSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             so2_df_err_mult.savefig(output_file_directory + '\\fErrorDfSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             nox_df_mult.savefig(output_file_directory + '\\fDfNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             nox_df_err_mult.savefig(output_file_directory + '\\fErrorDfNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             co2_mefs_df_mult.savefig(output_file_directory + '\\fDfMefCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             co2_mefs_df_err_mult.savefig(output_file_directory + '\\fErrorDfMefCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             so2_mefs_df_mult.savefig(output_file_directory + '\\fDfMefSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             so2_mefs_df_err_mult.savefig(output_file_directory + '\\fErrorDfMefSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             nox_mefs_df_mult.savefig(output_file_directory + '\\fDfMefNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
+#             nox_mefs_df_err_mult.savefig(output_file_directory + '\\fErrorDfMefNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
 # =============================================================================
-        #save the pd for plotDispatchMultiple
-        if nr == 'MRO': 
-            pd_MRO = pd
-        if nr == 'TRE': 
-            pd_TRE = pd
-        if nr == 'FRCC': 
-            pd_FRCC = pd
-        if nr == 'WECC': 
-            pd_WECC = pd
-        
-        
-    #plot the solutions for different NERC regions on the same figures
-    pdmult = plotDispatchMultiple([pd_MRO, pd_TRE, pd_FRCC, pd_WECC])
-    price_df_mult = pdmult.plot_density_function('cumulative', 'data', 'gen_cost_marg', start_date=df_start, end_date=df_end, x_range=[0,60])
-    price_df_err_mult = pdmult.plot_density_function('probability', 'error', 'gen_cost_marg', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
-    co2_df_mult = pdmult.plot_density_function('cumulative', 'data', 'co2_tot', start_date=df_start, end_date=df_end)
-    co2_df_err_mult = pdmult.plot_density_function('probability', 'error', 'co2_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
-    so2_df_mult = pdmult.plot_density_function('cumulative', 'data', 'so2_tot', start_date=df_start, end_date=df_end, bin_no=50, x_range=[-scipy.inf, scipy.inf])
-    so2_df_err_mult = pdmult.plot_density_function('probability', 'error', 'so2_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1])
-    nox_df_mult = pdmult.plot_density_function('cumulative', 'data', 'nox_tot', start_date=df_start, end_date=df_end)
-    nox_df_err_mult = pdmult.plot_density_function('probability', 'error', 'nox_tot', start_date=df_start, end_date=df_end, bin_no=50, error_range=[-1,1]) 
-    #mefs
-    co2_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'co2_marg', start_date=df_start, end_date=df_end, x_range=[0,1100])
-    co2_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'co2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,2000], error_range=[-1100,1100])
-    so2_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'so2_marg', start_date=df_start, end_date=df_end, x_range=[0,4])
-    so2_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'so2_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,6], error_range=[-4,4])
-    nox_mefs_df_mult = pdmult.plot_density_function('cumulative', 'data', 'nox_marg', start_date=df_start, end_date=df_end, x_range=[0,2])
-    nox_mefs_df_err_mult = pdmult.plot_density_function('probability', 'error', 'nox_marg', start_date=df_start, end_date=df_end, bin_no=50, x_range=[0,3], error_range=[-2,2])
-# =============================================================================
-#     #save
-#     price_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfPriceMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     price_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfPriceMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     co2_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     co2_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     so2_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     so2_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     nox_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     nox_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     co2_mefs_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfMefCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     co2_mefs_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfMefCo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     so2_mefs_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfMefSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     so2_mefs_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfMefSo2Mult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     nox_mefs_df_mult.savefig(figure_save_location + '\\density_plots\\mult\\fDfMefNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-#     nox_mefs_df_err_mult.savefig(figure_save_location + '\\density_plots\\mult\\fErrorDfMefNoxMult_%s.png'%(str(run_year)), dpi=500, bbox_inches='tight')
-# 
-# =============================================================================
+
 
             
