@@ -1611,7 +1611,7 @@ class dispatch(object):
                     gd_df_mdt_temp = self.bs.df_0.copy()
                     gd_df_mdt_temp.update(self.createDfMdtCoal(dt, t))
                     #use that updated gd.df to create an updated bidStack object, and store it in the bs_mdt_dict
-                    bs_temp = copy.deepcopy(bs)
+                    bs_temp = copy.deepcopy(self.bs)
                     bs_temp.coal_mdt_demand_threshold = dt
                     bs_temp.updateDf(gd_df_mdt_temp)
                     bs_mdt_dict.update({dt:bs_temp})
