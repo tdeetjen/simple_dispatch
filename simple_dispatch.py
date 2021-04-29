@@ -1298,8 +1298,8 @@ class bidStack(object):
         c = {'ng': {'cc': '#377eb8', 'ct': '#377eb8', 'gt': '#4daf4a', 'st': '#984ea3'}, 'sub': {'st': '#e41a1c'}, 'lig': {'st': '#ffff33'}, 'bit': {'st': '#ff7f00'}, 'rc': {'st': '#252525'}}
                     
         bs_df_fuel_color['fuel_color'] = '#bcbddc'
-        for c_key in c.iterkeys():
-            for p_key in c[c_key].iterkeys():
+        for c_key in c.keys():
+            for p_key in c[c_key].keys():
                 bs_df_fuel_color.loc[(bs_df_fuel_color.fuel == c_key) & (bs_df_fuel_color.prime_mover == p_key), 'fuel_color'] = c[c_key][p_key]
         
         #color for any generators without a fuel_color entry
