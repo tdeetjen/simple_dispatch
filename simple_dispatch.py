@@ -607,7 +607,7 @@ class generatorData(object):
         #start with the datetime column
         start_date_str = (self.df_cems.date.min()[-4:] + '-' + self.df_cems.date.min()[:5] + ' 00:00')
         date_hour_count = len(self.df_cems.date.unique())*24#+1
-        hist_dispatch = pandas.DataFrame(scipy.array([pandas.Timestamp(start_date_str) + datetime.timedelta(hours=i) for i in xrange(date_hour_count)]), columns=['datetime'])
+        hist_dispatch = pandas.DataFrame(scipy.array([pandas.Timestamp(start_date_str) + datetime.timedelta(hours=i) for i in range(date_hour_count)]), columns=['datetime'])
         #add columns by aggregating df by date + hour
         hist_dispatch['demand'] = df.groupby(['date','hour'], as_index=False).sum().mwh
         hist_dispatch['co2_tot'] = df.groupby(['date','hour'], as_index=False).sum().co2_tot # * 2000
