@@ -1293,7 +1293,7 @@ class bidStack(object):
     
     
     def plotBidStackMultiColor(self, df_column, plot_type, fig_dim = (4,4), production_cost_only=True):    
-        bs_df_fuel_color = bs.df.copy()
+        bs_df_fuel_color = self.df.copy()
         
         c = {'ng': {'cc': '#377eb8', 'ct': '#377eb8', 'gt': '#4daf4a', 'st': '#984ea3'}, 'sub': {'st': '#e41a1c'}, 'lig': {'st': '#ffff33'}, 'bit': {'st': '#ff7f00'}, 'rc': {'st': '#252525'}}
                     
@@ -1313,29 +1313,29 @@ class bidStack(object):
         #color_2 = color_2.replace('#dd1c77', '#C0C0C0')
         #color_2 = color_2.replace('#bcbddc', '#E0E0E0')
         #set up the y data
-        y_data_e = bs.df.gen_cost * 0 #emissions bar chart. Default is zero unless not production_cost_only                    
+        y_data_e = self.df.gen_cost * 0 #emissions bar chart. Default is zero unless not production_cost_only
         if df_column == 'gen_cost':
             y_lab = 'Generation Cost [$/MWh]'
-            y_data = bs.df[df_column] - (bs.df.co2_cost + bs.df.so2_cost + bs.df.nox_cost) #cost excluding emissions taxes
+            y_data = self.df[df_column] - (self.df.co2_cost + self.df.so2_cost + self.df.nox_cost) #cost excluding emissions taxes
             if not production_cost_only:
-                y_data_e = bs.df[df_column]
+                y_data_e = self.df[df_column]
         if df_column == 'co2':
             y_lab = 'CO$_2$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         if df_column == 'so2':
             y_lab = 'SO$_2$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         if df_column == 'nox':
             y_lab = 'NO$_x$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         #create the data to be stacked on y_data to show the cost of the emission tax
         matplotlib.pylab.clf()
         f = matplotlib.pylab.figure(figsize=fig_dim)
         ax = f.add_subplot(111)
         if plot_type == 'line':
-            ax.plot( bs.df.demand/1000, y_data, linewidth=2.5)
+            ax.plot( self.df.demand/1000, y_data, linewidth=2.5)
         elif plot_type == 'bar':
-            ax.bar(bs.df.demand/1000, height=y_data_e, width=-scipy.maximum(0.2, bs.df['mw' + str(bs.time)]/1000), color=color_2, align='edge'), ax.bar(bs.df.demand/1000, height=y_data, width=-scipy.maximum(0.2, bs.df['mw' + str(bs.time)]/1000), color=color_2, align='edge')
+            ax.bar(self.df.demand/1000, height=y_data_e, width=-scipy.maximum(0.2, self.df['mw' + str(self.time)]/1000), color=color_2, align='edge'), ax.bar(self.df.demand/1000, height=y_data, width=-scipy.maximum(0.2, self.df['mw' + str(self.time)]/1000), color=color_2, align='edge')
             ##add legend above chart
             color_legend = []
             for c in bs_df_fuel_color.fuel_color.unique():
@@ -1346,7 +1346,7 @@ class bidStack(object):
             pass
         matplotlib.pylab.ylim(ymax=y_data.quantile(0.98)) #take the 98th percentile for the y limits.
         #ax.set_xlim(bs.hist_dispatch.demand.quantile(0.025)*0.001, bs.hist_dispatch.demand.quantile(0.975)*0.001) #take the 2.5th and 97.5th percentiles for the x limits
-        ax.set_xlim(0, bs.hist_dispatch.demand.quantile(0.975)*0.001) #take 0 and the 97.5th percentiles for the x limits
+        ax.set_xlim(0, self.hist_dispatch.demand.quantile(0.975)*0.001) #take 0 and the 97.5th percentiles for the x limits
         if df_column == 'gen_cost':
             if production_cost_only:
                 ax.set_ylim(0, 65)
@@ -1365,7 +1365,7 @@ class bidStack(object):
     
     
     def plotBidStackMultiColor_Coal_NGCC_NGGT_NGOther(self, df_column, plot_type, fig_dim = (4,4), production_cost_only=True):    
-        bs_df_fuel_color = bs.df.copy()
+        bs_df_fuel_color = self.df.copy()
         
         c = {'ng': {'cc': '#1b9e77', 'ct': '#1b9e77', 'gt': '#fc8d62', 'st': '#8da0cb'}, 'sub': {'st': '#252525'}, 'lig': {'st': '#252525'}, 'bit': {'st': '#252525'}, 'rc': {'st': '#252525'}}
                     
