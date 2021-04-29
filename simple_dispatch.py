@@ -850,7 +850,7 @@ class bidStack(object):
         """
         c = {'gas':'#888888', 'coal':'#bf5b17', 'oil':'#252525' , 'nuclear':'#984ea3', 'hydro':'#386cb0', 'biomass':'#7fc97f', 'geothermal':'#e31a1c', 'ofsl': '#c994c7'}
         self.df_0['fuel_color'] = '#bcbddc'
-        for c_key in c.iterkeys():
+        for c_key in c.keys():
             self.df_0.loc[self.df_0.fuel_type == c_key, 'fuel_color'] = c[c_key]            
      
            
