@@ -1624,7 +1624,7 @@ class dispatch(object):
 
 if __name__ == '__main__':
     run_year = 2017
-    for nreg in ['TRE']:
+    for nreg in ['WECC']:
     #for nreg in ['SERC', 'NPCC']:
     #for nreg in ['RFC', 'FRCC']:
     #for nreg in ['TRE', 'MRO', 'WECC', 'SPP']:
