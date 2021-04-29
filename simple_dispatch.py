@@ -456,7 +456,7 @@ class generatorData(object):
                         loop = 0
         
         #and now we still have some nan values for fuel types that had no nerc_region eia923 data. We'll start with the national median for the EIA923 data.
-        f_array = scipy.intersect1d(orispl_prices[orispl_prices[1].isna()].fuel.unique(), df.fuel.unique())
+        f_array = scipy.intersect1d(orispl_prices[orispl_prices[1].isna()].fuel.unique(), df.fuel[~df.fuel.isna()].unique())
         for f in f_array: 
             temp = df[df.fuel==f][['month', 'quantity', 'fuel_price']]
             temp['weighted'] = scipy.multiply(temp.quantity, temp.fuel_price)
