@@ -86,20 +86,20 @@ class generatorData(object):
         egrid_year_str = str(math.floor((year / 2.0)) * 2)[2:4] #eGrid is only every other year so we have to use eGrid 2016 to help with a 2017 run, for example
         if year < 2014:
             egrid_year_str = str(14) #egrid data before 2014 does not have unit level data, so use 2014. We risk missing a few generators that retired between 'year' and 2014.
-        print 'Reading in unit level data from eGRID...'
+        print('Reading in unit level data from eGRID...')
         self.egrid_unt = pandas.read_excel(egrid_fname, 'UNT'+egrid_year_str, skiprows=[0]) 
-        print 'Reading in generator level data from eGRID...'
+        print('Reading in generator level data from eGRID...')
         self.egrid_gen = pandas.read_excel(egrid_fname, 'GEN'+egrid_year_str, skiprows=[0])
-        print 'Reading in plant level data from eGRID...'
+        print('Reading in plant level data from eGRID...')
         self.egrid_plnt = pandas.read_excel(egrid_fname, 'PLNT'+egrid_year_str, skiprows=[0])
-        print 'Reading in data from EIA Form 923...'
+        print('Reading in data from EIA Form 923...')
         eia923 = pandas.read_excel(eia923_fname, 'Page 5 Fuel Receipts and Costs', skiprows=[0,1,2,3]) 
         eia923 = eia923.rename(columns={'Plant Id': 'orispl'})
         self.eia923 = eia923
         eia923_1 = pandas.read_excel(eia923_fname, 'Page 1 Generation and Fuel Data', skiprows=[0,1,2,3,4]) 
         eia923_1 = eia923_1.rename(columns={'Plant Id': 'orispl'})
         self.eia923_1 = eia923_1
-        print 'Reading in data from FERC Form 714...'
+        print('Reading in data from FERC Form 714...')
         self.ferc714 = pandas.read_csv(ferc714_fname)
         self.ferc714_ids = pandas.read_csv(ferc714IDs_fname)
         self.cems_folder = cems_folder
@@ -131,7 +131,7 @@ class generatorData(object):
         self.df_cems : has 1 row per hour of the year per generator unit or plant. columns describe energy generated, emissions, and grid region. This dataframe will be used to describe the historical hourly demand, dispatch, and emissions
         """
         #copy in the egrid data and merge it together. In the next few lines we use the eGRID excel file to bring in unit level data for fuel consumption and emissions, generator level data for capacity and generation, and plant level data for fuel type and grid region. Then we compile it together to get an initial selection of data that defines each generator.
-        print 'Cleaning eGRID Data...'
+        print('Cleaning eGRID Data...')
         #unit-level data
         df = self.egrid_unt.copy(deep=True)
         #rename columns
@@ -173,7 +173,7 @@ class generatorData(object):
         df.loc[df.year_online.isna(), 'year_online'] = scipy.zeros_like(df.loc[df.year_online.isna(), 'year_online']) + self.year
         ###
         #now sort through and compile CEMS data. The goal is to use CEMS data to characterize each generator unit. So if CEMS has enough information to describe a generator unit we will over-write the eGRID data. If not, we will use the eGRID data instead. (CEMS data is expected to be more accurate because it has actual hourly performance of the generator units that we can use to calculate their operational characteristics. eGRID is reported on an annual basis and might be averaged out in different ways than we would prefer.)
-        print 'Compiling CEMS data...'
+        print('Compiling CEMS data...')
         #dictionary of which states are in which nerc region (b/c CEMS file downloads have the state in the filename)
         states = {'FRCC': ['fl'], 
                   'WECC': ['ca','or','wa', 'nv','mt','id','wy','ut','co','az','nm','tx'],
@@ -187,8 +187,8 @@ class generatorData(object):
         df_cems = pandas.DataFrame()
         for s in states[self.nerc]:
             for m in ['01','02','03','04','05','06','07','08','09','10','11', '12']:
-                print s + ': ' + m
-                df_cems_add = pandas.read_csv(self.cems_folder + '\\%s\\%s%s%s.csv'%(str(self.year),str(self.year),s,m))
+                print(s + ': ' + m)
+                df_cems_add = pandas.read_csv(self.cems_folder + '/%s/%s%s%s.csv'%(str(self.year),str(self.year),s,m))
                 df_cems_add = df_cems_add[['ORISPL_CODE', 'UNITID', 'OP_DATE','OP_HOUR','GLOAD (MW)', 'SO2_MASS (lbs)', 'NOX_MASS (lbs)', 'CO2_MASS (tons)', 'HEAT_INPUT (mmBtu)']].dropna()
                 df_cems_add.columns=['orispl', 'unit', 'date','hour','mwh', 'so2_tot', 'nox_tot', 'co2_tot', 'mmbtu']
                 df_cems = pandas.concat([df_cems, df_cems_add])
@@ -456,7 +456,7 @@ class generatorData(object):
                         loop = 0
         
         #and now we still have some nan values for fuel types that had no nerc_region eia923 data. We'll start with the national median for the EIA923 data.
-        f_array = scipy.intersect1d(orispl_prices[orispl_prices[1].isna()].fuel.unique(), df.fuel.unique())
+        f_array = scipy.intersect1d(orispl_prices[orispl_prices[1].isna()].fuel.unique(), df.fuel[~df.fuel.isna()].unique())
         for f in f_array: 
             temp = df[df.fuel==f][['month', 'quantity', 'fuel_price']]
             temp['weighted'] = scipy.multiply(temp.quantity, temp.fuel_price)
@@ -498,7 +498,7 @@ class generatorData(object):
         ---
         Adds one column for each week of the year to self.df that contains environmental damages in $/MWh for each generation unit calculated using the EASIURE method
         """   
-        print 'Adding environmental damages...'
+        print('Adding environmental damages...')
         #clean the easiur data
         df = self.easiur_per_plant.copy(deep=True)
         df = df[['ORISPL','SO2 Winter 150m','SO2 Spring 150m','SO2 Summer 150m','SO2 Fall 150m','NOX Winter 150m','NOX Spring 150m','NOX Summer 150m','NOX Fall 150m']]
@@ -595,7 +595,7 @@ class generatorData(object):
         Creates
         self.hist_dispatch : one row per hour of the year, columns for net demand, total emissions, operating cost of the marginal generator, and the contribution of different fuels to the total energy production
         """
-        print 'Calculating demand data from CEMS...'
+        print('Calculating demand data from CEMS...')
         #re-compile the cems data adding in fuel and fuel type
         df = self.df_cems.copy(deep=True)
         merge_orispl_unit = self.df.copy(deep=True)[['orispl_unit', 'fuel', 'fuel_type']]
@@ -607,7 +607,7 @@ class generatorData(object):
         #start with the datetime column
         start_date_str = (self.df_cems.date.min()[-4:] + '-' + self.df_cems.date.min()[:5] + ' 00:00')
         date_hour_count = len(self.df_cems.date.unique())*24#+1
-        hist_dispatch = pandas.DataFrame(scipy.array([pandas.Timestamp(start_date_str) + datetime.timedelta(hours=i) for i in xrange(date_hour_count)]), columns=['datetime'])
+        hist_dispatch = pandas.DataFrame(scipy.array([pandas.Timestamp(start_date_str) + datetime.timedelta(hours=i) for i in range(date_hour_count)]), columns=['datetime'])
         #add columns by aggregating df by date + hour
         hist_dispatch['demand'] = df.groupby(['date','hour'], as_index=False).sum().mwh
         hist_dispatch['co2_tot'] = df.groupby(['date','hour'], as_index=False).sum().co2_tot # * 2000
@@ -633,7 +633,7 @@ class generatorData(object):
         Calculates the historical electricity price for the nerc region, adding it as a new column to the demand data
         ---
         """
-        print 'Adding historical electricity prices...'
+        print('Adding historical electricity prices...')
         #We will use FERC 714 data, where balancing authorities and similar entities report their locational marginal prices. This script pulls in those price for every reporting entity in the nerc region and takes the max price across the BAs/entities for each hour.
         df = self.ferc714.copy(deep=True)
         df_ids = self.ferc714_ids.copy(deep=True)
@@ -663,7 +663,7 @@ class generatorData(object):
         Creates
         self.demand_data : row for each hour. columns for datetime and demand
         """
-        print 'Creating "demand_data" time series...'
+        print('Creating "demand_data" time series...')
         #demand using CEMS data
         demand_data = self.hist_dispatch.copy(deep=True)
         demand_data.datetime = pandas.to_datetime(demand_data.datetime)
@@ -676,7 +676,7 @@ class generatorData(object):
         ---
         plot_col: 'co2', 'heat_rate', etc.
         """
-        print 'Creating "demand_data" time series...'
+        print('Creating "demand_data" time series...')
         #copy the CEMS data
         cems_copy = self.df_cems.copy(deep=True)
         #each uniqe unit tag
@@ -684,7 +684,7 @@ class generatorData(object):
        #empty data frame for results
         result = pandas.DataFrame({'orispl_unit': ounique, plot_col+'_5': scipy.zeros_like(ounique), plot_col+'_25': scipy.zeros_like(ounique), plot_col+'_50': scipy.zeros_like(ounique), plot_col+'_75': scipy.zeros_like(ounique), plot_col+'_95': scipy.zeros_like(ounique), 'data_points': scipy.zeros_like(ounique)})
         #for each unique unit calculate the 5th, 25th, median, 75th, and 95th percentile data
-        print 'Calculating quantiles...'
+        print('Calculating quantiles...')
         for o in ounique:
             cems_e_test = cems_copy.loc[cems_copy.orispl_unit==o, plot_col]
             if len(cems_e_test) != 0:
@@ -749,7 +749,7 @@ class generatorData(object):
         mdt_coal_events['integral_convex_filtered'] = mdt_coal_events.indices.apply(d_keep_convex)
         #mdt_coal_events['integral_convex_filtered'] = mdt_coal_events['integral_convex_filtered'].replace(0, scipy.nan)
         #keep any local maximums of the filtered convex integral
-        mdt_coal_events['local_maximum'] = ((mdt_coal_events.integral_convex_filtered== mdt_coal_events.integral_convex_filtered.rolling(window=self.coal_min_downtime/2+1, center=True).max()) & (mdt_coal_events.integral_convex_filtered != 0) & (mdt_coal_events.integral_x >= mdt_coal_events.integral_x_xt))
+        mdt_coal_events['local_maximum'] = ((mdt_coal_events.integral_convex_filtered== mdt_coal_events.integral_convex_filtered.rolling(window=int(self.coal_min_downtime/2+1), center=True).max()) & (mdt_coal_events.integral_convex_filtered != 0) & (mdt_coal_events.integral_x >= mdt_coal_events.integral_x_xt))
         #spread the maximum out over the min downtime window
         mdt_coal_events = mdt_coal_events[mdt_coal_events.local_maximum]
         mdt_coal_events['demand_threshold'] = mdt_coal_events.demand
@@ -850,7 +850,7 @@ class bidStack(object):
         """
         c = {'gas':'#888888', 'coal':'#bf5b17', 'oil':'#252525' , 'nuclear':'#984ea3', 'hydro':'#386cb0', 'biomass':'#7fc97f', 'geothermal':'#e31a1c', 'ofsl': '#c994c7'}
         self.df_0['fuel_color'] = '#bcbddc'
-        for c_key in c.iterkeys():
+        for c_key in c.keys():
             self.df_0.loc[self.df_0.fuel_type == c_key, 'fuel_color'] = c[c_key]            
      
            
@@ -1260,7 +1260,7 @@ class bidStack(object):
             #    color_legend.append(matplotlib.patches.Patch(color=c, label=self.df.fuel_type[self.df.fuel_color==c].iloc[0]))
             #ax.legend(handles=color_legend, bbox_to_anchor=(0.5, 1.2), loc='upper center', ncol=3, fancybox=True, shadow=True)
         else:
-            print '***Error: enter valid argument for plot_type'
+            print('***Error: enter valid argument for plot_type')
             pass
         matplotlib.pylab.ylim(ymax=y_data.quantile(0.98)) #take the 98th percentile for the y limits.
         #ax.set_xlim(self.hist_dispatch.demand.quantile(0.025)*0.001, self.hist_dispatch.demand.quantile(0.975)*0.001) #take the 2.5th and 97.5th percentiles for the x limits
@@ -1293,13 +1293,13 @@ class bidStack(object):
     
     
     def plotBidStackMultiColor(self, df_column, plot_type, fig_dim = (4,4), production_cost_only=True):    
-        bs_df_fuel_color = bs.df.copy()
+        bs_df_fuel_color = self.df.copy()
         
         c = {'ng': {'cc': '#377eb8', 'ct': '#377eb8', 'gt': '#4daf4a', 'st': '#984ea3'}, 'sub': {'st': '#e41a1c'}, 'lig': {'st': '#ffff33'}, 'bit': {'st': '#ff7f00'}, 'rc': {'st': '#252525'}}
                     
         bs_df_fuel_color['fuel_color'] = '#bcbddc'
-        for c_key in c.iterkeys():
-            for p_key in c[c_key].iterkeys():
+        for c_key in c.keys():
+            for p_key in c[c_key].keys():
                 bs_df_fuel_color.loc[(bs_df_fuel_color.fuel == c_key) & (bs_df_fuel_color.prime_mover == p_key), 'fuel_color'] = c[c_key][p_key]
         
         #color for any generators without a fuel_color entry
@@ -1313,40 +1313,40 @@ class bidStack(object):
         #color_2 = color_2.replace('#dd1c77', '#C0C0C0')
         #color_2 = color_2.replace('#bcbddc', '#E0E0E0')
         #set up the y data
-        y_data_e = bs.df.gen_cost * 0 #emissions bar chart. Default is zero unless not production_cost_only                    
+        y_data_e = self.df.gen_cost * 0 #emissions bar chart. Default is zero unless not production_cost_only
         if df_column == 'gen_cost':
             y_lab = 'Generation Cost [$/MWh]'
-            y_data = bs.df[df_column] - (bs.df.co2_cost + bs.df.so2_cost + bs.df.nox_cost) #cost excluding emissions taxes
+            y_data = self.df[df_column] - (self.df.co2_cost + self.df.so2_cost + self.df.nox_cost) #cost excluding emissions taxes
             if not production_cost_only:
-                y_data_e = bs.df[df_column]
+                y_data_e = self.df[df_column]
         if df_column == 'co2':
             y_lab = 'CO$_2$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         if df_column == 'so2':
             y_lab = 'SO$_2$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         if df_column == 'nox':
             y_lab = 'NO$_x$ Emissions [kg/MWh]'
-            y_data = bs.df[df_column + str(bs.time)]
+            y_data = self.df[df_column + str(self.time)]
         #create the data to be stacked on y_data to show the cost of the emission tax
         matplotlib.pylab.clf()
         f = matplotlib.pylab.figure(figsize=fig_dim)
         ax = f.add_subplot(111)
         if plot_type == 'line':
-            ax.plot( bs.df.demand/1000, y_data, linewidth=2.5)
+            ax.plot( self.df.demand/1000, y_data, linewidth=2.5)
         elif plot_type == 'bar':
-            ax.bar(bs.df.demand/1000, height=y_data_e, width=-scipy.maximum(0.2, bs.df['mw' + str(bs.time)]/1000), color=color_2, align='edge'), ax.bar(bs.df.demand/1000, height=y_data, width=-scipy.maximum(0.2, bs.df['mw' + str(bs.time)]/1000), color=color_2, align='edge')
+            ax.bar(self.df.demand/1000, height=y_data_e, width=-scipy.maximum(0.2, self.df['mw' + str(self.time)]/1000), color=color_2, align='edge'), ax.bar(self.df.demand/1000, height=y_data, width=-scipy.maximum(0.2, self.df['mw' + str(self.time)]/1000), color=color_2, align='edge')
             ##add legend above chart
             color_legend = []
             for c in bs_df_fuel_color.fuel_color.unique():
                 color_legend.append(matplotlib.patches.Patch(color=c, label=bs_df_fuel_color.fuel[bs_df_fuel_color.fuel_color==c].iloc[0] + '_' + bs_df_fuel_color.prime_mover[bs_df_fuel_color.fuel_color==c].iloc[0]))
             ax.legend(handles=color_legend, bbox_to_anchor=(0.5, 1.2), loc='upper center', ncol=3, fancybox=True, shadow=True)
         else:
-            print '***Error: enter valid argument for plot_type'
+            print('***Error: enter valid argument for plot_type')
             pass
         matplotlib.pylab.ylim(ymax=y_data.quantile(0.98)) #take the 98th percentile for the y limits.
         #ax.set_xlim(bs.hist_dispatch.demand.quantile(0.025)*0.001, bs.hist_dispatch.demand.quantile(0.975)*0.001) #take the 2.5th and 97.5th percentiles for the x limits
-        ax.set_xlim(0, bs.hist_dispatch.demand.quantile(0.975)*0.001) #take 0 and the 97.5th percentiles for the x limits
+        ax.set_xlim(0, self.hist_dispatch.demand.quantile(0.975)*0.001) #take 0 and the 97.5th percentiles for the x limits
         if df_column == 'gen_cost':
             if production_cost_only:
                 ax.set_ylim(0, 65)
@@ -1365,13 +1365,13 @@ class bidStack(object):
     
     
     def plotBidStackMultiColor_Coal_NGCC_NGGT_NGOther(self, df_column, plot_type, fig_dim = (4,4), production_cost_only=True):    
-        bs_df_fuel_color = bs.df.copy()
+        bs_df_fuel_color = self.df.copy()
         
         c = {'ng': {'cc': '#1b9e77', 'ct': '#1b9e77', 'gt': '#fc8d62', 'st': '#8da0cb'}, 'sub': {'st': '#252525'}, 'lig': {'st': '#252525'}, 'bit': {'st': '#252525'}, 'rc': {'st': '#252525'}}
                     
         bs_df_fuel_color['fuel_color'] = '#bcbddc'
-        for c_key in c.iterkeys():
-            for p_key in c[c_key].iterkeys():
+        for c_key in c.keys():
+            for p_key in c[c_key].keys():
                 bs_df_fuel_color.loc[(bs_df_fuel_color.fuel == c_key) & (bs_df_fuel_color.prime_mover == p_key), 'fuel_color'] = c[c_key][p_key]
         
         #color for any generators without a fuel_color entry
@@ -1416,7 +1416,7 @@ class bidStack(object):
             #    color_legend.append(matplotlib.patches.Patch(color=c, label=self.df.fuel_type[self.df.fuel_color==c].iloc[0]))
             #ax.legend(handles=color_legend, bbox_to_anchor=(0.5, 1.2), loc='upper center', ncol=3, fancybox=True, shadow=True)
         else:
-            print '***Error: enter valid argument for plot_type'
+            print('***Error: enter valid argument for plot_type')
             pass
         matplotlib.pylab.ylim(ymax=y_data.quantile(0.98)) #take the 98th percentile for the y limits.
         #ax.set_xlim(self.hist_dispatch.demand.quantile(0.025)*0.001, self.hist_dispatch.demand.quantile(0.975)*0.001) #take the 2.5th and 97.5th percentiles for the x limits
@@ -1589,7 +1589,7 @@ class dispatch(object):
         #otherwise, run the dispatch in time slices, updating the bid stack each slice
         else:
             for t in self.time_array:
-                print str(round(t/float(len(self.time_array)),3)*100) + '% Complete'
+                print(str(round(t/float(len(self.time_array)),3)*100) + '% Complete')
                 #update the bidStack object to the current week
                 self.bs.updateTime(t)
                 #calculate the dispatch for the time slice over which the updated fuel prices are relevant
@@ -1611,7 +1611,7 @@ class dispatch(object):
                     gd_df_mdt_temp = self.bs.df_0.copy()
                     gd_df_mdt_temp.update(self.createDfMdtCoal(dt, t))
                     #use that updated gd.df to create an updated bidStack object, and store it in the bs_mdt_dict
-                    bs_temp = copy.deepcopy(bs)
+                    bs_temp = copy.deepcopy(self.bs)
                     bs_temp.coal_mdt_demand_threshold = dt
                     bs_temp.updateDf(gd_df_mdt_temp)
                     bs_mdt_dict.update({dt:bs_temp})
@@ -1624,7 +1624,7 @@ class dispatch(object):
 
 if __name__ == '__main__':
     run_year = 2017
-    for nreg in ['TRE']:
+    for nreg in ['WECC']:
     #for nreg in ['SERC', 'NPCC']:
     #for nreg in ['RFC', 'FRCC']:
     #for nreg in ['TRE', 'MRO', 'WECC', 'SPP']:
